@@ -1,0 +1,16 @@
+cek jumlah selesai percabang 
+
+
+SELECT 
+    u.nama,
+    u.cabang,
+    COUNT(pt.pengaduan_id) AS selesai
+FROM pengaduan_trackings pt
+JOIN (
+    SELECT MAX(id) AS id
+    FROM pengaduan_trackings
+    GROUP BY pengaduan_id
+) lt ON pt.id = lt.id
+JOIN penggunas u ON u.id_pengguna = pt.petugas_id
+WHERE pt.status = 'selesai'
+GROUP BY u.id_pengguna, u.nama, u.cabang;

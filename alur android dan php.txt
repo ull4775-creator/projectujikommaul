@@ -1,0 +1,11 @@
++-----------------+         HTTP/JSON         +------------------+
+|   Android App   |  <-------------------->   |   Laravel API    |
+|  (User/Petugas) |                           |  Backend + DB    |
++-----------------+                           +------------------+
+         |                                              |
+         |                                              |
+         v                                              v
+   [UI / Tampilan]                               [Database MySQL]
+   - Input pengaduan                             - Tabel pengaduan
+   - Lihat status                                - Tabel user/petugas
+   - Update status

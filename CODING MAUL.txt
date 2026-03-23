@@ -1,0 +1,217 @@
+<div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card shadow-soft h-100">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">🗺️ Peta Panas Geospasial</h6>
+                    <p class="text-muted-sm mb-3">
+                        <i class="fas fa-info-circle"></i> 
+                        Visualisasi hotspot pengaduan 30 hari terakhir. Klik area untuk detail.
+                    </p>
+                    
+                    <div id="heatmap-container"></div>
+                    
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <span class="badge bg-danger">🔴</span> Area dengan frekuensi tinggi
+                            <span class="badge bg-warning text-dark">🟡</span> Area dengan frekuensi sedang
+                            <span class="badge bg-success">🟢</span> Area dengan frekuensi rendah
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+{{-- NORMALISASI DATA --}}
+@php
+    $grafikPerCabang = collect($grafikPerCabang)
+        ->map(fn ($v) => is_array($v) ? $v : array_fill(0, count($bulanLabels), $v))
+        ->toArray();
+@endphp
+
+{{-- SCRIPTS --}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<script>
+// ================= HEATMAP =================
+const heatmapData = @json($heatmapData);
+let map, heatLayer;
+
+function initHeatmap() {
+    // Initialize map
+    map = L.map('heatmap-container').setView([-6.2088, 106.8456], 12); // Jakarta coordinates
+    
+    // Add base layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    
+    // Prepare heat data
+    const heatPoints = heatmapData.map(item => [
+        item.lat,
+        item.lng,
+        item.weight  // Normalize weight
+    ]);
+    
+    // Add heatmap layer
+    heatLayer = L.heatLayer(heatPoints, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 18,
+        gradient: {
+            0.4: 'blue',
+            0.6: 'lime',
+            0.8: 'orange',
+            1.0: 'red'
+        }
+    }).addTo(map);
+    
+    // Add markers for each hotspot
+
+    
+    heatmapData.forEach(item => {
+        const marker = L.marker([item.lat, item.lng], {
+            icon: L.divIcon({
+                html: `<div style="
+                    background: ${item.tingkat_masalah === 'besar' ? '#ef4444' : 
+                              item.tingkat_masalah === 'sedang' ? '#f59e0b' : '#10b981'};
+                    color: white;
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: bold;
+                    font-size: 12px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                ">${item.intensity}</div>`,
+                className: '',
+                iconSize: [32, 32]
+            })
+        }).addTo(map);
+        
+        // Add popup
+        marker.bindPopup(`
+            <strong>📍 Hotspot Area</strong><br>
+            <small class="text-muted">Koordinat: ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</small><br><br>
+            <div class="mb-2">
+                <i class="fas fa-building text-primary"></i> 
+                <strong>Cabang:</strong> ${item.cabang}<br>
+                <i class="fas fa-exclamation-triangle text-warning"></i> 
+                <strong>Tingkat Masalah:</strong> ${item.tingkat_masalah}<br>
+                <i class="fas fa-chart-bar text-info"></i> 
+                <strong>Frekuensi:</strong> ${item.intensity} laporan<br>
+                <i class="fas fa-clock text-success"></i> 
+                <strong>Rata-rata Respons:</strong> ${item.avg_response_time} jam<br>
+                <i class="fas fa-weight text-danger"></i> 
+                <strong>Bobot:</strong> ${item.weight}
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="centerMap(${item.lat}, ${item.lng})">
+                <i class="fas fa-map-marker-alt"></i> Fokus ke Area Ini
+            </button>
+        `);
+    });
+}
+
+function centerMap(lat, lng) {
+    map.setView([lat, lng], 15);
+}
+
+// ================= TREND CHART =================
+const trendData   = @json($grafikPerCabang);
+const trendLabels = @json($bulanLabels);
+let trendChart;
+
+function percentChange(data){
+    return data.map((v,i)=>{
+        if(i===0) return 0;
+        const prev = data[i-1] || 1;
+        return (((v-prev)/prev)*100).toFixed(1);
+    });
+}
+
+function sumAllCabang(){
+    const cabangs = Object.values(trendData);
+    return trendLabels.map((_,i)=>
+        cabangs.reduce((sum, arr)=> sum + (arr[i] || 0), 0)
+    );
+}
+
+function renderTrend(slug='all'){
+    const ctx = document.getElementById('trendChart');
+    if(trendChart) trendChart.destroy();
+
+    const raw = slug==='all' ? sumAllCabang() : (trendData[slug] || []);
+    const percent = percentChange(raw);
+
+    trendChart = new Chart(ctx,{
+        type:'line',
+        data:{
+            labels: trendLabels,
+            datasets:[
+                {
+                    label:'Jumlah Pengaduan',
+                    data: raw,
+                    borderColor:'#2563eb',
+                    backgroundColor:'rgba(59,130,246,.25)',
+                    fill:true,
+                    tension:.4
+                },
+                {
+                    label:'Perubahan (%)',
+                    data: percent,
+                    borderColor:'#22c55e',
+                    borderDash:[6,6],
+                    yAxisID:'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 10 } },
+            scales: {
+                x: { ticks: { autoSkip: false } },
+                y: { beginAtZero: true },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const cabang = document.getElementById('trendCabang').value;
+                if (cabang === 'all') {
+                    alert('Silakan pilih cabang terlebih dahulu di dropdown untuk melihat detail');
+                    return;
+                }
+                window.location.href = `/admin/pengaduan/cabang/${cabang}`;
+            }
+        }
+    });
+}
+
+// ================= INIT =================
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize heatmap
+    initHeatmap();
+    
+    // Initialize trend chart
+    renderTrend();
+    
+    // Event listener dropdown
+    document.getElementById('trendCabang').addEventListener('change', e => {
+        renderTrend(e.target.value);
+    });
+});
+</script>
+
+@endsection

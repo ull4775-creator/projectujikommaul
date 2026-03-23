@@ -1,0 +1,12 @@
+{{-- TOMBOL LAPORAN BULANAN --}}
+<a href="{{ route('laporan.bulanan') }}" class="btn monthly-report-btn"
+style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; padding: 12px 24px; border-radius: 12px; font-weight: 600; position: relative;">
+<i class="fas fa-file-alt me-2"></i>
+<span>Buat Laporan Bulanan</span>
+<span class="report-badge">NEW</span>
+</a>
+<small class="text-muted-sm">
+Update terakhir: {{ now()->format('d M Y H:i') }}
+</small>
+</div>
+</div>
